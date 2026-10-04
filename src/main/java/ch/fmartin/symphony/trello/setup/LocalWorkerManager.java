@@ -1144,10 +1144,7 @@ final class LocalWorkerManager {
             Optional<Path> explicitWorkflowEnvPath,
             Path fallbackWorkflowEnvPath,
             boolean validateServerPort) {
-        if (board.isPresent() && workflow.isPresent()) {
-            throw new TrelloBoardSetupException(
-                    "setup_worker_selection_conflict", "--board and --workflow cannot be used together.");
-        }
+        ConnectedBoardSelection.rejectConflictingSelectors(board, workflow);
         return board.map(selector -> selectedBoard(manifest, selector))
                 .or(() -> workflow.map(workflowSelector -> selectedWorkflow(
                         manifest,
