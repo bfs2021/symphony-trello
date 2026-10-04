@@ -1,0 +1,4 @@
+exitCode: 0
+--- stdout ---
+Starting Codex for Trello board "Snapshot Queue".
+--- stderr ---

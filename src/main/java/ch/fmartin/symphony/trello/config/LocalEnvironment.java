@@ -17,7 +17,7 @@ import java.util.Optional;
 /// The parser is owned on purpose; see docs/adr/0100-keep-the-hand-rolled-dotenv-parser.md.
 public final class LocalEnvironment {
     private static final Path DEFAULT_DOTENV = Path.of(".env");
-    private static final String DOTENV_PATH_ENV = "SYMPHONY_TRELLO_DOTENV";
+    public static final String DOTENV_PATH_ENV = "SYMPHONY_TRELLO_DOTENV";
 
     private LocalEnvironment() {}
 

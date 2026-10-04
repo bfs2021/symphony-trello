@@ -1964,6 +1964,40 @@ final class TrelloBoardSetupMainTest {
     }
 
     @Test
+    void codexHelpDocumentsSelectorsCredentialsAndExamples() {
+        // given
+
+        // when
+        CliRunResult result = runCli("codex", "--help");
+
+        // then
+        result.assertSuccess()
+                .stdoutContains(
+                        "Open an interactive Codex session that can manage one connected Trello board.",
+                        "Trello credentials stay in Symphony",
+                        "--board=<board>",
+                        "Connected Trello board name, id, short link, or board",
+                        "--workflow=<workflow>",
+                        "symphony-trello codex --board \"Symphony Work Queue\"",
+                        "symphony-trello codex --workflow /path/to/WORKFLOW.board.md")
+                .stderrEmpty();
+    }
+
+    @Test
+    void codexRejectsBoardAndWorkflowTogetherBeforeStartingCodex() {
+        // given
+
+        // when
+        CliRunResult result = runCli("codex", "--board", "Queue", "--workflow", "WORKFLOW.md");
+
+        // then
+        result.assertFailure(SETUP_FAILURE)
+                .stderrContains(
+                        "setup_failed code=setup_worker_selection_conflict",
+                        "--board and --workflow cannot be used together.");
+    }
+
+    @Test
     void statusHelpDescribesWorkflowRuntimeStateWithoutAutostartClaims() {
         // given
 
@@ -7524,7 +7558,8 @@ final class TrelloBoardSetupMainTest {
                 Arguments.of("new-board", "Usage: symphony-trello new-board"),
                 Arguments.of("import-board", "Usage: symphony-trello import-board"),
                 Arguments.of("list-workspaces", "Usage: symphony-trello list-workspaces"),
-                Arguments.of("diagnostics", "Usage: symphony-trello diagnostics"));
+                Arguments.of("diagnostics", "Usage: symphony-trello diagnostics"),
+                Arguments.of("codex", "Usage: symphony-trello codex"));
     }
 
     private static Stream<Arguments> commandsThatDoNotWriteWorkflows() {
@@ -7546,7 +7581,8 @@ final class TrelloBoardSetupMainTest {
                 Arguments.of((Object) new String[] {"new-board", "--version"}),
                 Arguments.of((Object) new String[] {"import-board", "--version"}),
                 Arguments.of((Object) new String[] {"list-workspaces", "--version"}),
-                Arguments.of((Object) new String[] {"diagnostics", "--version"}));
+                Arguments.of((Object) new String[] {"diagnostics", "--version"}),
+                Arguments.of((Object) new String[] {"codex", "--version"}));
     }
 
     private static Stream<Arguments> mainProcessExitCases() {

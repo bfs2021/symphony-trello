@@ -74,9 +74,10 @@ The same CI run showed that spaces, `(`, `)`, `~`, `;`, `,`, `=`, `:`, `[`, `]`,
 `$`, `'`, a trailing backslash, and an empty argument reach the program unchanged.
 
 `ProcessCommandRunner` (setup prerequisite probes and the interactive `codex login`),
-`CodexModelDefaultsResolver` (`codex app-server` for model defaults), and setup diagnostics use the
-resolver. The worker's Codex launch runs `bash -lc` with the configured `codex.command`, so bash
-resolves the command there and the worker does not use the resolver.
+`CodexModelDefaultsResolver` (`codex app-server` for model defaults), `CodexBoardSession` (the
+interactive `symphony-trello codex` session), and setup diagnostics use the resolver. The worker's
+Codex launch runs `bash -lc` with the configured `codex.command`, so bash resolves the command
+there and the worker does not use the resolver.
 
 The command runner owns the wrapper and the tool it starts. Interruption of an interactive wait
 terminates that process tree and preserves the caller's interrupt status, just as cancellation of
@@ -94,9 +95,9 @@ checks bounded termination. It uses a real batch shim in Windows CI and a Bash w
 * Good, because Linux, macOS, and Windows `.exe` launches keep their exact previous command.
 * Bad, because an argument with `"`, `%`, `!`, `&`, `|`, `<`, `>`, `^`, or a line break cannot reach
   a batch shim. This includes an executable path with one of these characters. Current callers pass
-  fixed arguments, and the developer instructions planned for
-  [GitHub PR #790](https://github.com/martin-francois/symphony-trello/pull/790) already limit
-  themselves to letters, digits, spaces, and `-_.,:/+@`.
+  fixed arguments, and the developer instructions of `symphony-trello codex`
+  ([ADR 0090](0090-board-aware-interactive-codex-session.md)) keep to letters, digits, spaces, and
+  `-_.,:/+@` on one line.
 * Neutral, because the tool runs as a child of `cmd.exe`. When a setup probe times out,
   `ProcessCommandRunner` stops the started process and its descendants, so the tool does not
   outlive the probe.
@@ -167,7 +168,6 @@ Setup asks users to install a Codex build that ships an `.exe` on `PATH`.
 
 ## More Information
 
-[GitHub PR #790](https://github.com/martin-francois/symphony-trello/pull/790) adds the
-`symphony-trello codex` command, which also starts `codex` by bare name. That command should build
-its launch with `ExecutableResolver.launchCommand` so it gets the same Windows behavior, and the
-Windows consequence in its ADR 0090 should point here.
+`symphony-trello codex` ([ADR 0090](0090-board-aware-interactive-codex-session.md)) builds its
+launch with `ExecutableResolver.launchCommand` as well. `CodexBoardSessionTest` covers that launch
+on a simulated Windows host and, in the `windows-powershell` job, through a real shim.

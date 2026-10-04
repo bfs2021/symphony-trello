@@ -11,6 +11,7 @@ import ch.fmartin.symphony.trello.tracker.SymphonyCommentFooter;
 import ch.fmartin.symphony.trello.tracker.TrelloClient;
 import ch.fmartin.symphony.trello.tracker.TrelloException;
 import ch.fmartin.symphony.trello.tracker.TrelloMoveTargets;
+import ch.fmartin.symphony.trello.tracker.TrelloToolRefusal;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -271,17 +272,17 @@ public class TrelloHandoffToolHandler {
             return failure("unsupported_tool", "Unsupported Trello handoff tool: " + tool);
         }
         if (!config.trelloTools().enabled()) {
-            return failure("trello_tools_disabled", "Trello handoff tools are disabled by trello_tools.enabled.");
+            return refusal(TrelloToolRefusal.TOOLS_DISABLED);
         }
         if (!config.trelloTools().allowWrites()) {
-            return failure("trello_writes_disabled", "Trello writes are disabled by trello_tools.allow_writes.");
+            return refusal(TrelloToolRefusal.WRITES_DISABLED);
         }
         if (blank(card.id())) {
             return failure("missing_card_context", "The active worker session has no Trello card id.");
         }
         for (ToolPermission permission : definition.permissions()) {
             if (!permission.enabled(config.trelloTools())) {
-                return failure(permission.code, permission.message);
+                return refusal(permission.refusal);
             }
         }
         JsonNode arguments = params.path("arguments");
@@ -1229,9 +1230,7 @@ public class TrelloHandoffToolHandler {
     private ObjectNode moveCurrentCard(
             EffectiveConfig config, Card card, JsonNode arguments, HandoffMoveObserver observer) {
         if (!moveAllowlistConfigured(config)) {
-            return failure(
-                    "trello_move_allowlist_required",
-                    "Trello card moves require trello_tools.allowed_move_list_ids or allowed_move_list_names.");
+            return refusal(TrelloToolRefusal.MOVE_ALLOWLIST_REQUIRED);
         }
         String listId = arguments.path("list_id").textValue();
         String listName = arguments.path("list_name").textValue();
@@ -1331,6 +1330,10 @@ public class TrelloHandoffToolHandler {
         return result;
     }
 
+    private ObjectNode refusal(TrelloToolRefusal refusal) {
+        return failure(refusal.code(), refusal.message());
+    }
+
     private ObjectNode failure(String code, String message) {
         Map<String, String> payload = new LinkedHashMap<>();
         payload.put("error", code);
@@ -1404,22 +1407,16 @@ public class TrelloHandoffToolHandler {
     }
 
     private enum ToolPermission {
-        FOLLOW_UP_CARDS(
-                "trello_follow_up_cards_disabled",
-                "Follow-up cards are disabled by trello_tools.follow_up_cards.enabled."),
-        WRITES("trello_writes_disabled", "Trello writes are disabled by trello_tools.allow_writes."),
-        COMMENTS("trello_comments_disabled", "Trello comments are disabled by trello_tools.allow_comments."),
-        CHECKLISTS("trello_checklists_disabled", "Trello checklists are disabled by trello_tools.allow_checklists."),
-        URL_ATTACHMENTS(
-                "trello_url_attachments_disabled",
-                "Trello URL attachments are disabled by trello_tools.allow_url_attachments.");
+        FOLLOW_UP_CARDS(TrelloToolRefusal.FOLLOW_UP_CARDS_DISABLED),
+        WRITES(TrelloToolRefusal.WRITES_DISABLED),
+        COMMENTS(TrelloToolRefusal.COMMENTS_DISABLED),
+        CHECKLISTS(TrelloToolRefusal.CHECKLISTS_DISABLED),
+        URL_ATTACHMENTS(TrelloToolRefusal.URL_ATTACHMENTS_DISABLED);
 
-        private final String code;
-        private final String message;
+        private final TrelloToolRefusal refusal;
 
-        ToolPermission(String code, String message) {
-            this.code = code;
-            this.message = message;
+        ToolPermission(TrelloToolRefusal refusal) {
+            this.refusal = refusal;
         }
 
         boolean enabled(EffectiveConfig.TrelloToolsConfig tools) {

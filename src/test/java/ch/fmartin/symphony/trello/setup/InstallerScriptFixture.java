@@ -1624,7 +1624,12 @@ final class InstallerScriptFixture {
         var output = new StringWriter();
         try (var input = new BufferedReader(new StringReader(""))) {
             var main = new TrelloBoardSetupMain(
-                    mock(TrelloBoardSetupService.class), mock(LocalWorkerManager.class), input, System.out, System.err);
+                    mock(TrelloBoardSetupService.class),
+                    mock(LocalWorkerManager.class),
+                    mock(CodexBoardSession.class),
+                    input,
+                    System.out,
+                    System.err);
             var command = new CommandLine(main).setOut(new PrintWriter(output)).setErr(new PrintWriter(output));
             if (!supported) {
                 command.getCommandSpec().removeSubcommand("migrate-workflows");

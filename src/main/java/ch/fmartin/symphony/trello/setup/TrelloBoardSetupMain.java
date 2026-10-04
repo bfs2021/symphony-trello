@@ -55,7 +55,8 @@ import picocli.CommandLine.Spec;
             TrelloBoardSetupMain.LogsCommand.class,
             TrelloBoardSetupMain.DiagnosticsCommand.class,
             TrelloBoardSetupMain.MigrateWorkflowsCommand.class,
-            TrelloBoardSetupMain.TutorialCommand.class
+            TrelloBoardSetupMain.TutorialCommand.class,
+            TrelloBoardSetupMain.CodexCommand.class
         })
 public final class TrelloBoardSetupMain implements Callable<Integer> {
     private static final String CONFIG_DIR_PROPERTY = "symphony.trello.config.dir";
@@ -63,6 +64,7 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
 
     private final TrelloBoardSetupService boardSetup;
     private final LocalWorkerManager workerManager;
+    private final CodexBoardSession codexSession;
     private final BufferedReader input;
     private final PrintStream out;
     private final PrintStream err;
@@ -73,11 +75,13 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
     TrelloBoardSetupMain(
             TrelloBoardSetupService boardSetup,
             LocalWorkerManager workerManager,
+            CodexBoardSession codexSession,
             BufferedReader input,
             PrintStream out,
             PrintStream err) {
         this.boardSetup = boardSetup;
         this.workerManager = workerManager;
+        this.codexSession = codexSession;
         this.input = input;
         this.out = out;
         this.err = err;
@@ -151,9 +155,28 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
             LocalWorkerManager workerManager,
             PrintStream out,
             PrintStream err) {
+        return run(
+                args,
+                boardSetup,
+                localSetup,
+                workerManager,
+                CodexBoardSession.forCurrentProcess(workerManager),
+                out,
+                err);
+    }
+
+    static int run(
+            String[] args,
+            TrelloBoardSetupService boardSetup,
+            LocalSetup localSetup,
+            LocalWorkerManager workerManager,
+            CodexBoardSession codexSession,
+            PrintStream out,
+            PrintStream err) {
         String[] effectiveArgs = InstalledCliDefaults.apply(args, System.getenv());
         BufferedReader input = standardInputReader(); // NOPMD - System.in is process-owned.
-        CommandLine commandLine = new CommandLine(new TrelloBoardSetupMain(boardSetup, workerManager, input, out, err))
+        CommandLine commandLine = new CommandLine(
+                        new TrelloBoardSetupMain(boardSetup, workerManager, codexSession, input, out, err))
                 .addSubcommand(
                         "setup-local", new SetupLocalCommandFactory.SetupLocalCommand(localSetup, input, out, err))
                 .setOut(new PrintWriter(out, true, StandardCharsets.UTF_8))
@@ -805,8 +828,47 @@ public final class TrelloBoardSetupMain implements Callable<Integer> {
         }
     }
 
+    @Command(
+            name = "codex",
+            description = {
+                "Open an interactive Codex session that can manage one connected Trello board.",
+                "Codex starts in the current directory with your own Codex login and settings.",
+                "Trello credentials stay in Symphony; Codex uses board-scoped Trello tools."
+            },
+            footer = {
+                "",
+                "Examples:",
+                "  symphony-trello codex",
+                "  symphony-trello codex --board \"Symphony Work Queue\"",
+                "  symphony-trello codex --board abc123",
+                "  symphony-trello codex --workflow /path/to/WORKFLOW.board.md"
+            },
+            versionProvider = TrelloBoardSetupMain.ProjectVersion.class,
+            mixinStandardHelpOptions = true)
+    static final class CodexCommand implements Callable<Integer> {
+        @ParentCommand
+        TrelloBoardSetupMain parent;
+
+        @Mixin
+        LifecycleOptions options = new LifecycleOptions();
+
+        @Override
+        public Integer call() throws Exception {
+            options.validateCliPaths();
+            return parent.codexSession.run(
+                    new CodexSessionRequest(
+                            options.board,
+                            options.workflow,
+                            options.appHome,
+                            options.configDir,
+                            options.workspaceRoot,
+                            options.stateHome),
+                    new StreamTerminal(parent.input, parent.out, parent.err));
+        }
+    }
+
     static final class LifecycleOptions {
-        @Option(names = "--board", description = "Connected Trello board name, id, or short link.")
+        @Option(names = "--board", description = "Connected Trello board name, id, short link, or board URL.")
         Optional<String> board = Optional.empty();
 
         @Option(names = "--workflow", description = "Workflow file to manage.")

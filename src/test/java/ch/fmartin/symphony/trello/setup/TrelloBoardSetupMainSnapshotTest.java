@@ -5,9 +5,12 @@ import static ch.fmartin.symphony.trello.testsupport.CredentialSentinels.TRELLO_
 import static ch.fmartin.symphony.trello.testsupport.TestRepositoryUrls.HTTPS;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import ch.fmartin.symphony.trello.process.PlatformEnvironment;
 import ch.fmartin.symphony.trello.testsupport.CliRunResult;
+import ch.fmartin.symphony.trello.testsupport.FakeTrelloBoardServer;
 import ch.fmartin.symphony.trello.testsupport.StatefulFakeTrello;
 import ch.fmartin.symphony.trello.testsupport.TerminalSnapshots;
+import ch.fmartin.symphony.trello.testsupport.TestEnv;
 import ch.fmartin.symphony.trello.testsupport.TranscriptNormalizer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.BufferedReader;
@@ -19,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -64,7 +68,12 @@ final class TrelloBoardSetupMainSnapshotTest extends LocalSetupFixtureSupport {
             var err = new PrintStream(stderr, true, StandardCharsets.UTF_8);
             var boardSetup = new TrelloBoardSetup(new ObjectMapper()).withPortProbe(port -> false);
             var main = new TrelloBoardSetupMain(
-                    new TrelloBoardSetupService(boardSetup, workerManager, Map.of()), workerManager, input, out, err);
+                    new TrelloBoardSetupService(boardSetup, workerManager, Map.of()),
+                    workerManager,
+                    CodexBoardSession.forCurrentProcess(workerManager),
+                    input,
+                    out,
+                    err);
             var command = new CommandLine(main)
                     .setOut(new PrintWriter(out, true, StandardCharsets.UTF_8))
                     .setErr(new PrintWriter(err, true, StandardCharsets.UTF_8));
@@ -344,6 +353,82 @@ final class TrelloBoardSetupMainSnapshotTest extends LocalSetupFixtureSupport {
         assertThat(report).isNotEmptyFile();
     }
 
+    @Test
+    void codex() throws Exception {
+        // given
+        Path configDir = Files.createDirectories(tempDir.resolve("codex-config"));
+        try (var trello = new FakeTrelloBoardServer("board-1", "SYNTH001", SnapshotBoard.NAME)
+                .withList("list-ready", "Ready for Codex")
+                .withList("list-done", "Done")
+                .start()) {
+            Path workflow = Files.writeString(
+                    configDir.resolve("WORKFLOW.snapshot.md"),
+                    """
+                    ---
+                    tracker:
+                      kind: trello
+                      endpoint: "%s"
+                      api_key: $TRELLO_API_KEY
+                      api_token: $TRELLO_API_TOKEN
+                      board_id: "board-1"
+                      active_states:
+                        - Ready for Codex
+                      terminal_states:
+                        - Done
+                    codex:
+                      command: codex app-server
+                    ---
+                    """
+                            .formatted(trello.endpoint()));
+            Files.writeString(configDir.resolve(".env"), TestEnv.trelloCredentials(TRELLO_API_KEY, TRELLO_API_TOKEN));
+            new ConnectedBoardRepository(configDir.resolve(ConnectedBoardManifest.FILE_NAME))
+                    .save(new ConnectedBoardManifest(List.of(ConnectedBoardBuilder.connectedBoard(workflow)
+                            .withBoardId("board-1")
+                            .withBoardKey("SYNTH001")
+                            .withBoardName(SnapshotBoard.NAME)
+                            .withEnvPath(configDir.resolve(".env"))
+                            .build())));
+
+            // when
+            CliRunResult result = runCli(
+                    setup,
+                    workerManager,
+                    codexSession(),
+                    "codex",
+                    "--config-dir",
+                    configDir.toString(),
+                    "--workspace-root",
+                    tempDir.resolve("codex-workspaces").toString(),
+                    "--state-home",
+                    tempDir.resolve("codex-state").toString());
+
+            // then
+            SNAPSHOTS.verify("cli/codex", result, normalizer());
+        }
+    }
+
+    /// A board session whose Codex is [FakeCodexMain], with Codex install and login checks that pass.
+    private CodexBoardSession codexSession() {
+        Map<String, String> environment = new HashMap<>(System.getenv());
+        environment.keySet().removeIf(name -> name.startsWith("TRELLO_"));
+        Path report = tempDir.resolve("codex-report.json");
+        return new CodexBoardSession(
+                PlatformEnvironment.of(environment, System.getProperty("os.name")),
+                new WorkflowConfigEditor(),
+                new LocalWorkerManager(environment),
+                FakeCodexMain.installedAndSignedIn(),
+                FakeCodexMain.command(),
+                builder -> {
+                    builder.environment().put(FakeCodexMain.REPORT_ENVIRONMENT, report.toString());
+                    return builder.redirectInput(ProcessBuilder.Redirect.PIPE)
+                            .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                            .redirectError(ProcessBuilder.Redirect.DISCARD)
+                            .start();
+                },
+                () -> false,
+                new ObjectMapper());
+    }
+
     private WorkerScenario connectedWorker() throws Exception {
         var fixture = new LocalWorkerManagerTestFixture(tempDir.resolve("worker"));
         ConnectedBoard board = fixture.connectedBoard("board-1", SnapshotBoard.NAME, SnapshotBoard.SLUG);
@@ -443,6 +528,11 @@ final class TrelloBoardSetupMainSnapshotTest extends LocalSetupFixtureSupport {
     }
 
     private CliRunResult runCli(LocalSetup localSetup, LocalWorkerManager manager, String... args) {
+        return runCli(localSetup, manager, CodexBoardSession.forCurrentProcess(manager), args);
+    }
+
+    private CliRunResult runCli(
+            LocalSetup localSetup, LocalWorkerManager manager, CodexBoardSession codexSession, String... args) {
         var stdout = new ByteArrayOutputStream();
         var stderr = new ByteArrayOutputStream();
         TrelloBoardSetup boardSetup = new TrelloBoardSetup(new ObjectMapper()).withPortProbe(port -> false);
@@ -455,6 +545,7 @@ final class TrelloBoardSetupMainSnapshotTest extends LocalSetupFixtureSupport {
                         new TrelloBoardSetupService(boardSetup, manager, Map.of()),
                         localSetup,
                         manager,
+                        codexSession,
                         new PrintStream(stdout, true, StandardCharsets.UTF_8),
                         new PrintStream(stderr, true, StandardCharsets.UTF_8)));
         return new CliRunResult(
