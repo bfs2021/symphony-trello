@@ -169,10 +169,20 @@ verify that second deletion.
 | 5. B: reset before first new event | PASS | `reset_person_distinct_id` at 00:24:02 answered 202 with no profile present afterwards; the heartbeat that followed was accepted with HTTP 200. By 00:24:35 B looked exactly like A: event queryable, one profile, same profile UUID as before the erasure. The reset changed nothing observable. |
 | 6. Conditional reset after a new event | NOT NEEDED | Both IDs had a resolved profile after their first new event, so no reset ran. |
 | 7. Old events absent and new records usable | PASS | At 00:24:35 neither ID returned any of its old event UUIDs, and each returned exactly its one new event. |
-| 8. Reused ID erasable, fixtures cleaned up | PENDING | `bulk_delete` for A, B, and C at 00:24:36: 202, `persons_found` 3, `persons_queued_for_deletion` 3, `events_queued_for_deletion` true, no errors. By 00:27:45 the profiles were gone from the person API and the new events were still queryable. Resume with the command above once PostHog has processed the deletion. |
+| 8. Reused ID erasable, fixtures cleaned up | FAIL | `bulk_delete` for A, B, and C at 00:24:36 on 2026-10-05: 202, `persons_found` 3, `persons_queued_for_deletion` 3, `events_queued_for_deletion` true, no errors. On 2026-10-17 C, deleted for the first time, had a `completed` record verified 2026-10-09 and no events. A and B, deleted once before and reused under the same profile UUID, had no new deletion record at all: `deletion_status` still listed only the 2026-09-22 row, their profiles were gone from the person API, and their one new event each was still queryable with the old profile UUID as `person_id`. The harness stays at `CLEANUP_REQUESTED` because that deletion will never be recorded. |
 
 PostHog verified the first deletion on a Friday, three days after the request. A deletion can
 therefore finish before the Sunday batch; poll the status instead of waiting for Sunday.
+
+Row 8 is the limit of the manual procedure: PostHog records one deletion per profile UUID, and a
+reused analytics ID gets its old profile UUID back, so a second `bulk_delete` for the same ID is
+accepted with a 202 but creates no deletion record and deletes no events. An erased legacy ID that
+reports again can be erased once more only through PostHog support. Installations with an
+ownership credential never reuse an ID, because each reporting period has its own analytics ID
+([ADR 0082](adr/0082-authenticated-erasure-with-reporting-periods.md)). The two leftover events
+of A and B, and the period-two event described in
+[docs/telemetry-erasure-implementation.md](telemetry-erasure-implementation.md), are the open
+support case for the test project.
 
 | Subject | Installation ID (`distinct_id`) | Profile UUID before erasure | Old event UUIDs |
 | --- | --- | --- | --- |

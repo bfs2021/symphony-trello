@@ -105,9 +105,19 @@ that the nested status check and the flag-name split work, and that the rendered
 A `--resume` on 2026-10-05 passed `period 1: physical event absence and public completion` and
 marked the first period complete. The same invocation ran the second period through the replay of
 the first period, forgery rejection, lost-response retry and provider-backed acceptance, all
-passing, and stopped again at `ACCEPTED_PHYSICAL_COMPLETION_PENDING` for the second period. One
-more `--resume` after PostHog completes that deletion decides `TWO_PERIOD_LIFECYCLE_PASS`. The run
+passing, and stopped again at `ACCEPTED_PHYSICAL_COMPLETION_PENDING` for the second period. The run
 from 2026-09-23 on the earlier handler reached the same point on the same day.
+
+A `--resume` on 2026-10-17 failed `period 2: physical event absence and public completion` on the
+current handler, so production stays disabled. PostHog's deletion record for the second period's
+profile reads `completed` with `delete_verified_at` 2026-10-09T12:35:17Z, yet the period's one
+event, captured and queryable twelve seconds before the deletion request, is still returned by
+the events query with that profile's `person_id`. The run on the earlier handler, whose second
+period was requested two minutes earlier the same night, passed the same check and reached
+`TWO_PERIOD_LIFECYCLE_PASS`, which authorizes nothing because its handler is not the current one.
+A deletion PostHog reports as verified can therefore leave an event behind, and the gate is right
+to read the events instead of the record. The ledger keeps the failed check and can be resumed;
+a new run needs its own `SYMPHONY_TRELLO_ERASURE_LIFECYCLE_DIR`.
 
 ### Risks and how they are handled
 

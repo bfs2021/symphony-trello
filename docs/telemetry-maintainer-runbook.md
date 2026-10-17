@@ -317,7 +317,12 @@ the verification note tested on 2026-10-05 whether PostHog then builds a new pro
 ID without maintainer work. It does: once the deletion status was `completed`, the first new
 report produced a queryable event and a profile for the same ID, with and without a reset
 beforehand, and none of the erased events came back. A re-enabled installation therefore needs no
-maintainer step in the tested sequence. The remaining guidance:
+maintainer step in the tested sequence. Row 8 of the same note, read on 2026-10-17, sets the limit:
+the reused ID gets its old profile UUID back, PostHog keeps one deletion record per profile UUID,
+and a second `bulk_delete` for that ID answers 202 but records and deletes nothing. A legacy ID can
+be erased once by this procedure; tell a user who asks a second time that the request goes to
+PostHog support, and open that request with the profile UUID and both request times. The remaining
+guidance:
 
 - `POST /api/projects/281084/persons/reset_person_distinct_id/` with body
   `{"distinct_id": "<analytics id>"}` answers 202 whenever the ID exists. Its implementation
