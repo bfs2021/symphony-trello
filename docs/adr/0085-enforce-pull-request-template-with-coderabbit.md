@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-10-04
-decision-makers: [François Martin, Claude]
+decision-makers: [François Martin]
 consulted:
   - .coderabbit.yaml
   - .github/pull_request_template.md
@@ -39,7 +39,7 @@ CodeRabbit output. How should the template become a merge requirement?
 * A breaking pull request must name what breaks, the migration path, and the alternative.
 * The compatibility check must not fail a body that `scripts/check-pr-compatibility-metadata.ts`
   accepts.
-* Release Please pull requests keep their no-check contract.
+* Release Please pull requests skip the template checks.
 * Renovate pull requests keep their automerge.
 * The pull request template itself does not change in this decision.
 
@@ -54,12 +54,12 @@ CodeRabbit output. How should the template become a merge requirement?
 
 Chosen option: CodeRabbit pre-merge checks through the request changes workflow.
 
-`.coderabbit.yaml` sets the built-in description check to `error`. It adds two custom checks in
+`.coderabbit.yaml` sets the built-in description check to `error`. It adds three custom checks in
 `error` mode. "AI assistance disclosed" fails when the AI Assistance heading or either checkbox is
 missing, and when `AI-assisted PR` is ticked without `I confirm I understand what the code does`.
 "Compatibility decision complete" fails when the Compatibility Decision section is missing, when
 not exactly one option is ticked, and when Breaking is ticked without non-placeholder `Breaks:`,
-`Migration:`, and `Alternative:` values.
+`Migration:`, and `Alternative:` values. "Redaction checked" requires the redaction checkbox in the Review Checklist to be ticked.
 
 CodeRabbit documents that error mode blocks a merge only together with
 `request_changes_workflow: true`. With it, CodeRabbit submits a changes-requested review while a
@@ -71,7 +71,7 @@ same reviewer approves.
 schema describes `commit_status` as a legacy mirror of review progress that applies only when
 `review_progress` is disabled, and `review_status` as the skip notice in the walkthrough comment.
 Turning either on would put CodeRabbit output on Release Please pull requests, which
-`ReleaseWorkflowTest.releasePleasePullRequestsDoNotCreateCiChecks` forbids, and would not make a
+`ReleaseWorkflowTest` forbids, and would not make a
 failing check block anything.
 
 `renovate[bot]` joins `github-actions[bot]` in `auto_review.ignore_usernames`. Bots do not fill in
@@ -105,14 +105,21 @@ check cannot tell a pull request without AI help from one whose author skipped t
 * Good, because a deleted or unfilled template now gets a changes-requested review that stops the
   merge.
 * Good, because an AI-assisted pull request cannot merge until a person ticks the confirmation.
-* Good, because the checks need no new workflow, token, or script, and CodeRabbit already reviews
-  every human pull request here.
-* Good, because Release Please and Renovate pull requests behave as before.
+* Good, because CodeRabbit already reviews every human pull request here.
+* Good, because Release Please and Renovate pull requests still skip CodeRabbit template checks.
+* Bad, because the metadata-only configuration guard adds one check to Release Please pull requests.
+  It has no bot, branch-name, or path-filter exemption: every non-owner change to the configuration
+  must fail. GitHub path filters inspect at most 300 changed files, so filtering the workflow would
+  leave large pull requests outside the guard.
 * Bad, because the checks are language-model judgments. A check can return Inconclusive, which does
   not block, and the full-body fallback relies on the check agent fetching the body when it is cut
   short.
-* Bad, because CodeRabbit reads `.coderabbit.yaml` from the pull request branch, so a pull request
-  that edits it can weaken its own checks. Reviewers must read any change to that file.
+* Good, because a trusted `pull_request_target` workflow fails when any author except
+  `martinfrancois` changes or renames `.coderabbit.yaml`. It reads paginated pull request file
+  metadata and never checks out or runs pull request code. The workflow takes effect once it is
+  present on the base branch. The check is not a required ruleset status, so maintainers must keep
+  the rule that all checks pass before merging. Owner-authored configuration changes still need
+  review because they change the checks for the same pull request.
 * Bad, because the built-in description check takes no instructions. It judges the body against
   the template on its own terms and may fail a body that leaves an optional field blank.
 * Bad, because the maintainer's own pull requests have no requested reviewer to override a failed
@@ -121,7 +128,7 @@ check cannot tell a pull request without AI help from one whose author skipped t
   a later review completes.
 * Bad, because the instructions quote template text, so a template edit must update them. A script
   test catches a quoted excerpt the template no longer contains.
-* Bad, because each custom check takes one instruction text, so both repeat the rules for reading
+* Bad, because each custom check takes one instruction text, so all repeat the rules for reading
   the body. YAML cannot splice a shared part into a block scalar, so a script test keeps the copies
   identical instead.
 
@@ -145,7 +152,9 @@ schema after changing it, and review the compatibility check's instructions when
 
 On a pull request, an emptied body must produce a failed description check and a changes-requested
 review from CodeRabbit. Comment `@coderabbitai run pre-merge checks` to rerun the checks after
-editing the body.
+editing the body. Before merging this change, use a scratch pull request with the same configuration,
+all required checks green, and no unresolved review threads. Record its changes-requested review and
+blocked merge state, then correct the body and confirm that the review gate clears.
 
 ## Pros and Cons of the Options
 

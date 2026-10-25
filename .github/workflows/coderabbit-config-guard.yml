@@ -1,0 +1,31 @@
+name: CodeRabbit configuration guard
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions: {}
+
+jobs:
+  coderabbit-config-guard:
+    runs-on: ubuntu-26.04
+    permissions:
+      pull-requests: read
+    steps:
+      # The base-branch workflow reads metadata only; it never checks out or runs PR code.
+      - name: Restrict CodeRabbit configuration changes to the owner
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            if (context.payload.pull_request.user.login === "martinfrancois") {
+              return;
+            }
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              ...context.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+            if (files.some(file => file.filename === ".coderabbit.yaml"
+                || file.previous_filename === ".coderabbit.yaml")) {
+              core.setFailed("Only martinfrancois may change .coderabbit.yaml.");
+            }
