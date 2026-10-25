@@ -119,6 +119,13 @@ A deletion PostHog reports as verified can therefore leave an event behind, and 
 to read the events instead of the record. The ledger keeps the failed check and can be resumed;
 a new run needs its own `SYMPHONY_TRELLO_ERASURE_LIFECYCLE_DIR`.
 
+A `--resume` on 2026-10-25 failed the same check: the event was still returned 20 days after the
+deletion request, so that run will not pass by waiting. A new run started on the current handler
+the same day in `~/.local/state/symphony-trello/erasure-lifecycle-v3`. All 14 admission checks
+passed and it stopped at `ACCEPTED_PHYSICAL_COMPLETION_PENDING` for the first period. Resume it
+with that directory once PostHog has run its deletion batch. Earlier requests were verified three
+to four days after they were made.
+
 ### Risks and how they are handled
 
 Review found four risks. Their handling:
