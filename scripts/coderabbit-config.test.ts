@@ -118,3 +118,69 @@ test("the pull request author cannot clear a failed pre-merge check without fixi
     "the author must not run @coderabbitai approve, which approves even with failing checks",
   );
 });
+
+test("redaction acknowledgement is required in error mode", () => {
+  // given
+  const check = CUSTOM_CHECKS.find(({name}) => name === "Redaction checked");
+
+  // when
+  const instructions = check?.instructions ?? "";
+
+  // then
+  assert.equal(check?.mode, "error");
+  assert.ok(instructions.includes('"Redaction checked:"'));
+  assert.ok(instructions.includes("checkbox is not ticked"));
+});
+
+interface GuardWorkflow {
+  readonly on: {readonly pull_request_target: {readonly types: readonly string[]; readonly paths?: readonly string[]; readonly "paths-ignore"?: readonly string[]}};
+  readonly permissions: Record<string, never>;
+  readonly jobs: {
+    readonly "coderabbit-config-guard": {
+      readonly if?: string;
+      readonly permissions: {readonly "pull-requests": string};
+      readonly steps: readonly {readonly uses: string; readonly with: {readonly script: string}}[];
+    };
+  };
+}
+
+const GUARD = parse(readFileSync(new URL("../.github/workflows/coderabbit-config-guard.yml", import.meta.url), "utf8")) as GuardWorkflow;
+
+test("the configuration guard executes trusted base code without a checkout", () => {
+  // when
+  const job = GUARD.jobs["coderabbit-config-guard"];
+
+  // then
+  assert.deepEqual(GUARD.on.pull_request_target.types, ["opened", "synchronize", "reopened"]);
+  assert.equal(GUARD.on.pull_request_target.paths, undefined);
+  assert.equal(GUARD.on.pull_request_target["paths-ignore"], undefined);
+  assert.equal(job.if, undefined);
+  assert.deepEqual(GUARD.permissions, {});
+  assert.deepEqual(job.permissions, {"pull-requests": "read"});
+  assert.equal(job.steps.length, 1);
+  assert.ok(job.steps[0]?.uses.startsWith("actions/github-script@"));
+});
+
+for (const scenario of [
+  {name: "owner changes config", author: "martinfrancois", files: [{filename: ".coderabbit.yaml"}], fails: false},
+  {name: "contributor changes another file", author: "contributor", files: [{filename: "README.md"}], fails: false},
+  {name: "release bot changes config", author: "github-actions[bot]", files: [{filename: ".coderabbit.yaml"}], fails: true},
+  {name: "contributor changes config", author: "contributor", files: [{filename: ".coderabbit.yaml"}], fails: true},
+  {name: "contributor renames config away", author: "contributor", files: [{filename: "config.yaml", previous_filename: ".coderabbit.yaml"}], fails: true},
+  {name: "contributor renames a file into config", author: "contributor", files: [{filename: ".coderabbit.yaml", previous_filename: "config.yaml"}], fails: true},
+]) {
+  test(`configuration guard: ${scenario.name}`, async () => {
+    // given
+    const failures: string[] = [];
+    const script = GUARD.jobs["coderabbit-config-guard"].steps[0]?.with.script ?? "";
+    const run = new Function("context", "github", "core", `return (async () => {${script}})();`);
+    const context = {repo: {owner: "martin-francois", repo: "symphony-trello"}, payload: {pull_request: {number: 1, user: {login: scenario.author}}}};
+    const github = {rest: {pulls: {listFiles: "listFiles"}}, paginate: async () => scenario.files};
+
+    // when
+    await run(context, github, {setFailed: (message: string) => failures.push(message)});
+
+    // then
+    assert.deepEqual(failures, scenario.fails ? ["Only martinfrancois may change .coderabbit.yaml."] : []);
+  });
+}

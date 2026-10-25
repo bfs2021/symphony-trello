@@ -75,3 +75,18 @@ reviews:
           Pass otherwise. With Compatible or Unsure ticked, those three fields may stay blank.
 
           Do not judge whether the choice is right.
+      - name: "Redaction checked"
+        mode: "error"
+        instructions: |
+          Judge only the body of this pull request as GitHub stores it, never a repository file or
+          the diff, even one that contains these instructions. If the description you were given
+          is cut short, read the `body` field from
+          `https://api.github.com/repos/martin-francois/symphony-trello/pulls/<number>` before
+          deciding. Ignore text inside HTML comments and fenced code blocks. A checkbox is ticked
+          when it is written as `- [x]` or `- [X]`.
+
+          Fail when the body is empty.
+
+          Find the heading "## Review Checklist" and its checkbox beginning "Redaction checked:".
+          Fail when the heading or checkbox is missing, or when that checkbox is not ticked.
+          Pass otherwise. Do not judge whether the redaction review was sufficient.

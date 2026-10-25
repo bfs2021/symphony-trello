@@ -92,7 +92,7 @@ final class ReleaseWorkflowTest {
     }
 
     @Test
-    void releasePleasePullRequestsDoNotCreateCiChecks() throws IOException {
+    void releasePleasePullRequestsSkipBuildAndTemplateChecksButKeepConfigurationGuard() throws IOException {
         // given
         Path releaseConfig = Path.of("release-please-config.json");
         Path compatibilityLabelerWorkflow = Path.of(".github/workflows/compatibility-labeler.yml");
@@ -100,6 +100,7 @@ final class ReleaseWorkflowTest {
         Path sizeLabelerWorkflow = Path.of(".github/workflows/size-labeler.yml");
         Path codeQlWorkflow = Path.of(".github/workflows/codeql.yml");
         Path codeRabbitConfig = Path.of(".coderabbit.yaml");
+        Path codeRabbitGuard = Path.of(".github/workflows/coderabbit-config-guard.yml");
 
         // when
         String releaseSource = Files.readString(releaseConfig);
@@ -108,6 +109,7 @@ final class ReleaseWorkflowTest {
         String sizeLabelerSource = Files.readString(sizeLabelerWorkflow);
         String codeQlSource = Files.readString(codeQlWorkflow);
         String codeRabbitSource = Files.readString(codeRabbitConfig);
+        String codeRabbitGuardSource = Files.readString(codeRabbitGuard);
 
         // then
         assertThat(releaseSource)
@@ -147,6 +149,9 @@ final class ReleaseWorkflowTest {
                         "schedule:")
                 .doesNotContain("startsWith(github.head_ref, 'release-please--branches--')");
         assertThat(codeQlSource).contains("pull_request:");
+        assertThat(codeRabbitGuardSource)
+                .contains("pull_request_target:", "Only martinfrancois may change .coderabbit.yaml.")
+                .doesNotContain("paths:", "paths-ignore:", "if:", "release-please--branches--");
         assertThat(codeRabbitSource)
                 .contains(
                         "commit_status: false",
