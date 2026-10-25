@@ -162,6 +162,7 @@ test("the configuration guard executes trusted base code without a checkout", ()
 });
 
 for (const scenario of [
+  {name: "GitHub file limit", author: "contributor", files: Array.from({length: 3000}, () => ({filename: "other.txt"})), fails: true, message: "Cannot verify CodeRabbit configuration at GitHub's 3000-file limit. Split this PR."},
   {name: "owner changes config", author: "martinfrancois", files: [{filename: ".coderabbit.yaml"}], fails: false},
   {name: "contributor changes another file", author: "contributor", files: [{filename: "README.md"}], fails: false},
   {name: "release bot changes config", author: "github-actions[bot]", files: [{filename: ".coderabbit.yaml"}], fails: true},
@@ -181,6 +182,7 @@ for (const scenario of [
     await run(context, github, {setFailed: (message: string) => failures.push(message)});
 
     // then
-    assert.deepEqual(failures, scenario.fails ? ["Only martinfrancois may change .coderabbit.yaml."] : []);
+    const expectedFailure = "message" in scenario ? scenario.message : "Only martinfrancois may change .coderabbit.yaml.";
+    assert.deepEqual(failures, scenario.fails ? [expectedFailure] : []);
   });
 }
