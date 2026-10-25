@@ -116,7 +116,10 @@ check cannot tell a pull request without AI help from one whose author skipped t
   short.
 * Good, because a trusted `pull_request_target` workflow fails when any author except
   `martinfrancois` changes or renames `.coderabbit.yaml`. It reads paginated pull request file
-  metadata and never checks out or runs pull request code. The workflow takes effect once it is
+  metadata and never checks out or runs pull request code. It also fails at the
+  [GitHub API's 3000-file limit](https://docs.github.com/en/rest/pulls/pulls#list-pull-requests-files),
+  where the returned list no longer proves that the configuration is unchanged.
+  The workflow takes effect once it is
   present on the base branch. The check is not a required ruleset status, so maintainers must keep
   the rule that all checks pass before merging. Owner-authored configuration changes still need
   review because they change the checks for the same pull request.
