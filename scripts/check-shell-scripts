@@ -10,7 +10,9 @@ fi
 
 case "${1:-}" in
 syntax)
-  bash -n -- "${shell_scripts[@]}"
+  for script in "${shell_scripts[@]}"; do
+    bash -n -- "$script"
+  done
   ;;
 shellcheck)
   shellcheck -- "${shell_scripts[@]}"
