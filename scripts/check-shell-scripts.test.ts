@@ -9,14 +9,14 @@ import type { TestContext } from "node:test";
 import test from "node:test";
 
 const wrapperPath = fileURLToPath(new URL("./check-shell-scripts", import.meta.url));
-const wrapper = await readFile(wrapperPath, "utf8");
+const wrapperSource = await readFile(wrapperPath, "utf8");
 
 async function createScriptRepository(t: TestContext, scripts: Record<string, string>) {
   const directory = await mkdtemp(join(tmpdir(), "check-shell-scripts-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
 
   const temporaryWrapper = join(directory, "check-shell-scripts");
-  await writeFile(temporaryWrapper, wrapper);
+  await writeFile(temporaryWrapper, wrapperSource);
   await chmod(temporaryWrapper, 0o755);
   execFileSync("git", ["init", "--quiet"], { cwd: directory });
   execFileSync("git", ["config", "core.autocrlf", "false"], { cwd: directory });
@@ -63,12 +63,12 @@ test("syntax mode accepts tracked Bash scripts without executing them", async (t
   assert.equal(existsSync(join(directory, "extensionless.executed")), false);
 });
 
-test("syntax mode catches invalid later scripts whose filenames contain spaces", async (t) => {
+test("syntax mode reports every invalid script after a valid first script, including names with spaces", async (t) => {
   // given
-  const invalidScript = "later invalid script";
   const directory = await createScriptRepository(t, {
     "first valid.sh": "#!/bin/bash\ntrue\n",
-    [invalidScript]: "#!/bin/bash\nif then\n",
+    "later invalid script": "#!/bin/bash\ntouch later.executed\nif then\n",
+    "second-invalid.sh": "#!/bin/bash\ntouch second.executed\nif then\n",
   });
 
   // when
@@ -76,6 +76,8 @@ test("syntax mode catches invalid later scripts whose filenames contain spaces",
 
   // then
   assert.equal(result.status, 2, "syntax errors in later tracked scripts must fail the gate");
-  assert.match(`${result.stdout}${result.stderr}`, /later invalid script/);
-  assert.equal(existsSync(join(directory, "later invalid script")), true);
+  assert.match(result.stderr, /later invalid script: line 3/);
+  assert.match(result.stderr, /second-invalid\.sh: line 3/, "a failing script must not stop the remaining checks");
+  assert.equal(existsSync(join(directory, "later.executed")), false);
+  assert.equal(existsSync(join(directory, "second.executed")), false);
 });

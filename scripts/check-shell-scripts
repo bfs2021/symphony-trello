@@ -10,9 +10,13 @@ fi
 
 case "${1:-}" in
 syntax)
+  # bash -n parses only its first path and passes the rest as arguments, so check each file and
+  # keep going after a failure to report every broken script in one run.
+  status=0
   for script in "${shell_scripts[@]}"; do
-    bash -n -- "$script"
+    bash -n -- "$script" || status=$?
   done
+  exit "$status"
   ;;
 shellcheck)
   shellcheck -- "${shell_scripts[@]}"
